@@ -249,6 +249,13 @@ io.on('connection', (socket) => {
         if (remaining.length === 1 && remaining[0].name === opponentSecret.name) {
             finishGame(roomId, playerId);
         }
+        // Condição: Eliminou o segredo do oponente (DERROTA IMEDIATA)
+        // Se o segredo do oponente NÃO está mais na lista de restantes, significa que foi eliminado.
+        else if (!remaining.some(c => c.name === opponentSecret.name)) {
+            // O jogador atual perdeu. O vencedor é o oponente.
+            const winnerId = isP1 ? room.gameData.p2.id : room.gameData.p1.id;
+            finishGame(roomId, winnerId);
+        }
     }
 
     socket.on('game_finish_turn', ({ roomId }) => {

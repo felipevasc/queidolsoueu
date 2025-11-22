@@ -47,6 +47,11 @@ window.refreshRooms = function() {
     socket.emit('req_refresh_rooms');
 }
 
+window.openSettings = function() {
+    showScreen('collection-screen');
+    fetchShopData();
+}
+
 function fetchShopData() { socket.emit('get_data'); }
 function createRoom() { socket.emit('create_room', `Sala de ${currentUser.username}`); }
 function joinRoom(id) { socket.emit('join_room', id); }
@@ -80,8 +85,79 @@ socket.on('update_data', (data) => {
     if(data.user) { currentUser = data.user; updateLobbyHeader(); }
     if(data.catalog) { renderShop(data.catalog, data.prices); renderCollection(data.catalog); }
 });
-function renderShop(c, p) { /* Código anterior */ }
-function renderCollection(c) { /* Código anterior */ }
+function renderShop(catalog, prices) {
+    const grid = document.getElementById('shop-grid');
+    grid.innerHTML = '';
+
+    catalog.forEach(char => {
+        // Show all levels 1-5
+        for(let lvl=1; lvl<=5; lvl++) {
+            // Check availability (if the file exists on server)
+            if(!char.levelsAvailable.includes(lvl)) continue;
+
+            const itemKey = `${char.name}_${lvl}`;
+            // Check if user owns it
+            const owned = currentUser.inventory.some(i => i.name === char.name && i.level === lvl);
+
+            const div = document.createElement('div');
+            div.className = 'shop-card';
+            if(!owned) div.className += ' locked';
+
+            const price = prices[lvl];
+            const imgUrl = `/personagens/level/${lvl}/${encodeURIComponent(char.name)}.png`;
+
+            div.innerHTML = `
+                <img src="${imgUrl}">
+                <div style="margin-top:5px">
+                    <strong>${char.name} (Lvl ${lvl})</strong><br>
+                    <span>💰 ${price}</span>
+                </div>
+                <button onclick="buyItem('${char.name}', ${lvl})" ${owned ? 'disabled' : ''} style="margin-top:5px; font-size:0.8rem; padding:5px 10px">
+                    ${owned ? 'Comprado' : 'Comprar'}
+                </button>
+            `;
+            grid.appendChild(div);
+        }
+    });
+}
+
+function renderCollection(catalog) {
+    const grid = document.getElementById('collection-grid');
+    grid.innerHTML = '';
+
+    // Add "Original" avatars (everyone has them)
+    catalog.forEach(char => {
+        // Original (Level 0)
+        createCollectionCard(grid, char.name, 0);
+
+        // Owned Levels
+        const myItems = currentUser.inventory.filter(i => i.name === char.name);
+        myItems.forEach(item => {
+            createCollectionCard(grid, item.name, item.level);
+        });
+    });
+}
+
+function createCollectionCard(grid, name, level) {
+    const div = document.createElement('div');
+    div.className = 'collection-card';
+
+    const isEquipped = (currentUser.avatar.name === name && (currentUser.avatar.level || 0) === level);
+    const folder = level === 0 ? 'original' : `level/${level}`;
+    const imgUrl = `/personagens/${folder}/${encodeURIComponent(name)}.png`;
+
+    div.innerHTML = `
+        <img src="${imgUrl}">
+        <div style="margin-top:5px">
+            <strong>${name} ${level>0 ? 'Lvl '+level : ''}</strong>
+        </div>
+        <button onclick="equip('${name}', ${level})" ${isEquipped ? 'disabled' : ''} style="margin-top:5px; font-size:0.8rem; padding:5px 10px; background:var(--pink-dark); color:white">
+            ${isEquipped ? 'Em uso' : 'Usar'}
+        </button>
+    `;
+    grid.appendChild(div);
+}
+
 function buyItem(n, l) { socket.emit('buy_avatar', { charName: n, level: l }); }
 function equip(n, l) { socket.emit('equip_avatar', { charName: n, level: l }); }
 
