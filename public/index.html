@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>K-Pop Guess Who</title>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+</head>
+
+<body>
+
+    <div id="app">
+        <section id="login-screen" class="active">
+            <div class="glass-panel">
+                <h1>🌸 K-Pop Guess 🌸</h1>
+                <input type="text" id="username" placeholder="Usuário">
+                <input type="password" id="password" placeholder="Senha">
+                <button onclick="login()">Entrar / Registrar</button>
+            </div>
+        </section>
+
+        <section id="main-menu" class="hidden">
+            <header>
+                <div class="user-info">
+                    <div class="avatar-circle" id="my-avatar-display"></div>
+                    <div>
+                        <span id="display-username">User</span>
+                        <div class="coins">🪙 <span id="display-coins">0</span></div>
+                    </div>
+                </div>
+                <button onclick="openSettings()">⚙️</button>
+            </header>
+
+            <div class="menu-grid">
+                <button class="big-btn pink" onclick="showScreen('lobby-screen'); refreshRooms()">🎮 Jogar</button>
+                <button class="big-btn white" onclick="showScreen('shop-screen'); fetchShopData()">🛍️ Loja</button>
+                <button class="big-btn white" onclick="showScreen('collection-screen'); fetchShopData()">📸
+                    Photocard</button>
+            </div>
+        </section>
+
+        <section id="lobby-screen" class="hidden">
+            <button class="back-btn" onclick="showScreen('main-menu')">⬅ Voltar</button>
+            <h2>Salas Abertas</h2>
+            <div id="rooms-list"></div>
+            <div class="create-room-box">
+                <input type="text" id="room-name" placeholder="Nome da Sala">
+                <button onclick="createRoom()">Criar Sala +</button>
+            </div>
+        </section>
+
+        <section id="shop-screen" class="hidden">
+            <button class="back-btn" onclick="showScreen('main-menu')">⬅ Voltar</button>
+            <h2>Loja de Avatares</h2>
+            <div id="shop-grid" class="cards-grid"></div>
+        </section>
+
+        <section id="collection-screen" class="hidden">
+            <button class="back-btn" onclick="showScreen('main-menu')">⬅ Voltar</button>
+            <h2>Meus Photocards</h2>
+            <p style="text-align:center; font-size:0.8em; color:#666">Clique para equipar</p>
+            <div id="collection-grid" class="cards-grid"></div>
+        </section>
+
+        <section id="waiting-room" class="hidden">
+            <h2>Aguardando Oponente...</h2>
+            <div class="loader"></div>
+        </section>
+
+        <section id="game-screen" class="hidden game-layout">
+
+            <div id="hud-top" class="hud-panel">
+                <div class="hud-content">
+                    <div class="player-identity">
+                        <div class="avatar-frame">
+                            <img id="my-game-avatar" src="" alt="Eu">
+                        </div>
+                        <div class="player-text">
+                            <span id="my-game-name" class="p-name">Eu</span>
+                            <span class="score-badge">Derrubados: <span id="my-score">0</span>/9</span>
+                        </div>
+                    </div>
+
+                    <div class="secret-card-mini">
+                        <span>SEU ALVO:</span>
+                        <div class="mini-card-img">
+                            <img id="my-secret-card" src="">
+                            <div class="mini-label" id="my-secret-name">?</div>
+                        </div>
+                    </div>
+
+                    <button id="finish-turn-btn" onclick="finishTurn()">✅ Confirmar</button>
+                </div>
+            </div>
+
+            <div id="game-board-container">
+                <div id="game-board" class="board-grid"></div>
+            </div>
+
+            <div id="hud-bottom" class="hud-panel">
+                <div class="hud-content opponent-content">
+                    <div class="player-identity">
+                        <div class="avatar-frame">
+                            <img id="opp-avatar" src="" alt="Opp">
+                        </div>
+                        <div class="player-text">
+                            <span id="opp-name" class="p-name">Oponente</span>
+                            <span class="score-badge">Derrubados: <span id="opp-score">0</span>/9</span>
+                        </div>
+                    </div>
+                    <div class="turn-status" id="turn-msg">Aguardando...</div>
+                </div>
+            </div>
+        </section>
+
+        <div id="win-overlay" class="hidden">
+            <div class="win-modal">
+                <h1 id="win-title">FIM DE JOGO</h1>
+                <h2 id="winner-announce">Vencedor: ???</h2>
+
+                <div class="reveal-section">
+                    <div class="reveal-card">
+                        <p>O Vencedor era:</p>
+                        <img id="reveal-winner-img" src="">
+                        <span id="reveal-winner-name">...</span>
+                    </div>
+                    <div class="reveal-card grayscale">
+                        <p>O Perdedor era:</p>
+                        <img id="reveal-loser-img" src="">
+                        <span id="reveal-loser-name">...</span>
+                    </div>
+                </div>
+
+                <p class="coins-gain" id="coins-msg"></p>
+                <button class="big-btn pink" onclick="resetToLobby()">Voltar ao Lobby</button>
+            </div>
+        </div>
+
+        
+    </div>
+
+    <script src="client.js"></script>
+</body>
+
+</html>
