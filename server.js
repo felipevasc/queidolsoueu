@@ -153,6 +153,9 @@ io.on('connection', (socket) => {
             rooms[roomId].players.push({ id: socket.id, user: currentUser, ready: false });
             socket.join(roomId);
             
+            // Envia confirmação para quem entrou (para setar currentRoomId no client)
+            socket.emit('room_joined', { roomId });
+
             // Avisa quem entrou
             io.to(roomId).emit('room_update', rooms[roomId]); 
             
