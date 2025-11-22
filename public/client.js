@@ -88,20 +88,21 @@ socket.on('update_data', (data) => {
 function renderShop(catalog, prices) {
     const grid = document.getElementById('shop-grid');
     grid.innerHTML = '';
+    let hasItems = false;
 
     catalog.forEach(char => {
         // Show all levels 1-5
         for(let lvl=1; lvl<=5; lvl++) {
             // Check availability (if the file exists on server)
             if(!char.levelsAvailable.includes(lvl)) continue;
+            hasItems = true;
 
-            const itemKey = `${char.name}_${lvl}`;
             // Check if user owns it
             const owned = currentUser.inventory.some(i => i.name === char.name && i.level === lvl);
 
             const div = document.createElement('div');
             div.className = 'shop-card';
-            if(!owned) div.className += ' locked';
+            // if(!owned) div.className += ' locked'; // Shop items don't need to look locked, just the ones in collection
 
             const price = prices[lvl];
             const imgUrl = `/personagens/level/${lvl}/${encodeURIComponent(char.name)}.png`;
@@ -112,35 +113,50 @@ function renderShop(catalog, prices) {
                     <strong>${char.name} (Lvl ${lvl})</strong><br>
                     <span>💰 ${price}</span>
                 </div>
-                <button onclick="buyItem('${char.name}', ${lvl})" ${owned ? 'disabled' : ''} style="margin-top:5px; font-size:0.8rem; padding:5px 10px">
+                <button onclick="buyItem('${char.name}', ${lvl})" ${owned ? 'disabled' : ''} style="margin-top:5px; font-size:0.8rem; padding:5px 10px; background:${owned ? '#ccc' : 'var(--pink-main)'}; color:white">
                     ${owned ? 'Comprado' : 'Comprar'}
                 </button>
             `;
             grid.appendChild(div);
         }
     });
+
+    if(!hasItems) {
+        grid.innerHTML = '<p style="text-align:center; grid-column: 1 / -1; color:#666;">Nenhum item disponível na loja no momento. Peça ao admin para adicionar imagens nas pastas de nível!</p>';
+    }
 }
 
 function renderCollection(catalog) {
     const grid = document.getElementById('collection-grid');
     grid.innerHTML = '';
 
-    // Add "Original" avatars (everyone has them)
-    catalog.forEach(char => {
-        // Original (Level 0)
-        createCollectionCard(grid, char.name, 0);
+    // Group by levels
+    for(let lvl=0; lvl<=5; lvl++) {
+        // Check if there are any items for this level (either original or available levels)
+        const itemsInLevel = catalog.filter(char => lvl === 0 || char.levelsAvailable.includes(lvl));
 
-        // Owned Levels
-        const myItems = currentUser.inventory.filter(i => i.name === char.name);
-        myItems.forEach(item => {
-            createCollectionCard(grid, item.name, item.level);
+        if(itemsInLevel.length === 0) continue;
+
+        // Create Header
+        const header = document.createElement('h3');
+        header.style.gridColumn = "1 / -1";
+        header.style.marginTop = "20px";
+        header.style.color = "var(--pink-dark)";
+        header.innerText = lvl === 0 ? "Nível Original" : `Nível ${lvl}`;
+        grid.appendChild(header);
+
+        // Render Items
+        itemsInLevel.forEach(char => {
+            const owned = lvl === 0 ? true : currentUser.inventory.some(i => i.name === char.name && i.level === lvl);
+            createCollectionCard(grid, char.name, lvl, owned);
         });
-    });
+    }
 }
 
-function createCollectionCard(grid, name, level) {
+function createCollectionCard(grid, name, level, owned) {
     const div = document.createElement('div');
     div.className = 'collection-card';
+    if(!owned) div.className += ' dimmed'; // Add dimmed class if not owned
 
     const isEquipped = (currentUser.avatar.name === name && (currentUser.avatar.level || 0) === level);
     const folder = level === 0 ? 'original' : `level/${level}`;
@@ -151,9 +167,15 @@ function createCollectionCard(grid, name, level) {
         <div style="margin-top:5px">
             <strong>${name} ${level>0 ? 'Lvl '+level : ''}</strong>
         </div>
-        <button onclick="equip('${name}', ${level})" ${isEquipped ? 'disabled' : ''} style="margin-top:5px; font-size:0.8rem; padding:5px 10px; background:var(--pink-dark); color:white">
-            ${isEquipped ? 'Em uso' : 'Usar'}
-        </button>
+        ${owned ?
+            `<button onclick="equip('${name}', ${level})" ${isEquipped ? 'disabled' : ''} style="margin-top:5px; font-size:0.8rem; padding:5px 10px; background:var(--pink-dark); color:white">
+                ${isEquipped ? 'Em uso' : 'Usar'}
+            </button>`
+            :
+            `<button disabled style="margin-top:5px; font-size:0.8rem; padding:5px 10px; background:#ccc; color:white">
+                🔒 Bloqueado
+            </button>`
+        }
     `;
     grid.appendChild(div);
 }

@@ -130,7 +130,8 @@ header {
     object-fit: cover;
     border-radius: 10px;
 }
-.shop-card.locked img { filter: grayscale(100%); opacity: 0.5; }
+.shop-card.locked img, .collection-card.dimmed img { filter: grayscale(100%); opacity: 0.5; }
+.collection-card.dimmed { opacity: 0.7; }
 
 /* JOGO */
 .game-header {
