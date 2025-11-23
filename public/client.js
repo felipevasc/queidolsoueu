@@ -1,4 +1,5 @@
 const socket = io();
+window.socket = socket; // Make available to other scripts
 
 // ESTADOS GLOBAIS
 let currentUser = null;

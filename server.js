@@ -28,6 +28,32 @@ function loadDB() {
 }
 function saveDB(data) { fs.writeJsonSync(DB_FILE, data); }
 
+// Carregar Wordlists
+function loadWordLists() {
+    const wordlistsDir = path.join(__dirname, 'wordlists');
+    if (!fs.existsSync(wordlistsDir)) return {};
+
+    const files = fs.readdirSync(wordlistsDir).filter(f => f.endsWith('.json'));
+    const wordData = {};
+
+    files.forEach(f => {
+        const theme = path.parse(f).name.toUpperCase();
+        try {
+            wordData[theme] = fs.readJsonSync(path.join(wordlistsDir, f));
+        } catch(e) {
+            console.error(`Error reading wordlist ${f}:`, e);
+        }
+    });
+
+    // Create GERAL theme
+    wordData['GERAL'] = [];
+    Object.values(wordData).forEach(list => {
+        wordData['GERAL'] = wordData['GERAL'].concat(list);
+    });
+
+    return wordData;
+}
+
 // Escanear Personagens nas pastas
 function scanCharacters() {
     const basePath = path.join(__dirname, 'personagens', 'original');
@@ -171,6 +197,167 @@ io.on('connection', (socket) => {
     socket.on('req_refresh_rooms', () => {
         socket.emit('update_rooms', getPublicRooms());
     });
+
+    // --- WORDLE GAME LOGIC ---
+
+    socket.on('start_wordle_game', ({ theme, difficulty }) => {
+        const WORD_DATA = loadWordLists();
+
+        // Helper to filter by length based on difficulty
+        const getLengthFilter = (diff) => {
+            switch (diff) {
+                case 'FACIL': return (len) => len <= 4;
+                case 'MEDIO': return (len) => len >= 4 && len <= 6;
+                case 'DIFICIL': return (len) => len > 6;
+                default: return (len) => len >= 4 && len <= 6;
+            }
+        };
+
+        const lengthFilter = getLengthFilter(difficulty);
+        const allWords = WORD_DATA[theme] || WORD_DATA['GERAL'];
+
+        const availableWords = allWords.filter(item => {
+            const len = item.word.normalize("NFD").replace(/[^a-zA-Z]/g, "").length;
+            return lengthFilter(len);
+        });
+
+        // Fallback if no words found
+        let selectedItem = { word: "MUNDO", hint: "Nosso lar." };
+
+        if (availableWords.length > 0) {
+            const randomIndex = Math.floor(Math.random() * availableWords.length);
+            selectedItem = availableWords[randomIndex];
+        }
+
+        const normalizedWord = selectedItem.word.normalize("NFD").replace(/[^a-zA-Z]/g, "").toUpperCase();
+
+        // Securely store game state in socket, do NOT send word to client
+        socket.data.wordleSession = {
+            word: normalizedWord,
+            hint: selectedItem.hint,
+            length: normalizedWord.length,
+            attempts: 0,
+            maxAttempts: 5,
+            revealedLetters: []
+        };
+
+        socket.emit('wordle_game_started', {
+            length: normalizedWord.length
+        });
+    });
+
+    socket.on('wordle_submit_guess', (guess) => {
+        if (!socket.data.wordleSession) return;
+        const session = socket.data.wordleSession;
+        const secretWord = session.word;
+        const guessedWord = guess.toUpperCase().normalize("NFD").replace(/[^A-Z]/g, "").substring(0, session.length);
+
+        if (guessedWord.length !== session.length) return;
+
+        session.attempts++;
+
+        // Validate Guess Logic (Matches the client logic)
+        const feedback = new Array(session.length).fill('absent');
+        const secretLetters = {};
+
+        for (let char of secretWord) {
+            secretLetters[char] = (secretLetters[char] || 0) + 1;
+        }
+
+        // Pass 1: Correct
+        for (let i = 0; i < session.length; i++) {
+            if (guessedWord[i] === secretWord[i]) {
+                feedback[i] = 'correct';
+                secretLetters[guessedWord[i]]--;
+            }
+        }
+
+        // Pass 2: Present
+        for (let i = 0; i < session.length; i++) {
+            if (feedback[i] !== 'correct') {
+                const letter = guessedWord[i];
+                if (secretLetters[letter] > 0) {
+                    feedback[i] = 'present';
+                    secretLetters[letter]--;
+                }
+            }
+        }
+
+        socket.emit('wordle_guess_result', {
+            guessedWord,
+            feedback,
+            attemptIndex: session.attempts - 1
+        });
+
+        // Check Win/Loss
+        if (guessedWord === secretWord) {
+            finishWordleGame(true);
+        } else if (session.attempts >= session.maxAttempts) {
+            finishWordleGame(false);
+        }
+    });
+
+    socket.on('wordle_request_hint', () => {
+        if (!socket.data.wordleSession) return;
+        socket.emit('wordle_hint_response', { hint: socket.data.wordleSession.hint });
+    });
+
+    socket.on('wordle_request_roulette', () => {
+        if (!socket.data.wordleSession) return;
+        const session = socket.data.wordleSession;
+
+        // Logic from original client code
+        const revealCount = Math.floor(Math.random() * (session.length + 1));
+
+        if (revealCount === 0) {
+            socket.emit('wordle_roulette_response', { letters: [], message: "zero" });
+            return;
+        }
+
+        const possibleLetters = Array.from(new Set(session.word.split('')))
+            .filter(letter => !session.revealedLetters.includes(letter));
+
+        if (possibleLetters.length === 0) {
+            socket.emit('wordle_roulette_response', { letters: [], message: "all_revealed" });
+            return;
+        }
+
+        let lettersToReveal = [];
+        for (let i = 0; i < revealCount && possibleLetters.length > 0; i++) {
+            const randomIndex = Math.floor(Math.random() * possibleLetters.length);
+            const letter = possibleLetters.splice(randomIndex, 1)[0];
+            lettersToReveal.push(letter);
+            session.revealedLetters.push(letter);
+        }
+
+        socket.emit('wordle_roulette_response', { letters: lettersToReveal, message: "success" });
+    });
+
+    function finishWordleGame(win) {
+        if (!currentUser || !socket.data.wordleSession) return;
+
+        const db = loadDB();
+        const idx = db.users.findIndex(u => u.username === currentUser.username);
+
+        if (idx !== -1) {
+            if (win) {
+                db.users[idx].coins += 3;
+            } else {
+                db.users[idx].coins = Math.max(0, db.users[idx].coins - 1);
+            }
+            saveDB(db);
+            currentUser = db.users[idx];
+            socket.emit('update_data', { user: currentUser });
+        }
+
+        socket.emit('wordle_game_over', {
+            win,
+            secretWord: socket.data.wordleSession.word
+        });
+
+        // Clear session
+        socket.data.wordleSession = null;
+    }
 
     // Lógica de Jogo
     function startGame(roomId) {
